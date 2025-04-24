@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Zip File Uploader + WebSocket File Receiver</title>
+</head>
+<body>
+  <h2>Upload ZIP File</h2>
+  <input type="file" id="zipFile" accept=".zip" />
+  <button onclick="uploadZip()">Upload & Stream Files</button>
+
+  <h3>Logs:</h3>
+  <pre id="log" style="background:#f0f0f0; padding:10px;"></pre>
+
+  <script>
+    const logBox = document.getElementById("log");
+    const log = (msg) => {
+      logBox.textContent += msg + "\n";
+    };
+
+    async function uploadZip() {
+      const fileInput = document.getElementById("zipFile");
+      const file = fileInput.files[0];
+      if (!file) {
+        alert("Please choose a zip file.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      log("Uploading zip...");
+
+      // Step 1: Upload ZIP to server
+      const response = await fetch("http://localhost:8080/upload-zip-start", {
+        method: "POST",
+        body: formData
+      });
+
+      if (!response.ok) {
+        log("Failed to upload zip.");
+        return;
+      }
+
+      const { session_id, files, total } = await response.json();
+      log(`Uploaded. Session ID: ${session_id}`);
+      log(`Expecting ${total} files...`);
+
+      // Step 2: Connect WebSocket to stream files
+      const ws = new WebSocket(`ws://localhost:8080/ws/stream/${session_id}`);
+
+      ws.binaryType = "arraybuffer";
+
+      ws.onmessage = async (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          if (data.type === "metadata") {
+            log("Received metadata:");
+            log(JSON.stringify(data, null, 2));
+          } else if (data.type === "file") {
+            log(`Received file: ${data.filename}`);
+            const blob = new Blob([new TextEncoder("latin1").encode(data.content)]);
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = data.filename.split("/").pop();  // just the file name
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+          } else if (data.type === "done") {
+            log("All files received.");
+          }
+        } catch (e) {
+          log("Error parsing WebSocket data.");
+        }
+      };
+
+      ws.onerror = (e) => log("WebSocket error: " + e.message);
+    }
+  </script>
+</body>
+</html>
