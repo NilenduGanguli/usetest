@@ -1,0 +1,13 @@
+max_overflow=settings.SQL_MAX_OVERFLOW,
+    pool_recycle=300,
+    pool_timeout=30,
+    # Transaction-mode poolers (Supabase port 6543) cannot share named prepared
+    # statements across client connections. Setting statement_cache_size=0 makes
+    # asyncpg deallocate each prepared statement immediately after use instead
+    # of caching it, preventing DuplicatePreparedStatementError.
+    # pool_pre_ping is intentionally omitted: its SELECT also creates a named
+    # prepared statement that collides in transaction mode. pool_recycle handles
+    # stale-connection hygiene instead.
+    # Client-slot budget ≈ uvicorn_workers × (SQL_POOL_SIZE + SQL_MAX_OVERFLOW).
+    # Keep SQL_DB_URL on Supavisor transaction mode (pooler host port 6543).
+    connect_args={"statement_cache_size": 0},
